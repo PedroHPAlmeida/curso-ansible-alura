@@ -451,3 +451,82 @@ ______
 * Como separar responsabilidades com templates.
 ______
 ## Aula 08 - Usando roles, dependências e defaults
+Para podermos reaproveitar nosso código podemos separá-lo em módulos chamados no Ansible de 'roles'. O Ansible encontra as roles em nosso projeto por meio de uma pasta de mesmo nome. Dentro dessa pasta criamos outros diretórios relacionamos a cada tarefa que queremos fazer, no nosso exemplo podemos criar três: mysql, webserver e wordpress. Dentro desses diretórios adicionamos outros para cada tipo de tarefa, tais como: tasks, handlers, templates e files. Dentro de cada diretório onde haverá código, devemos colocar dentro de um arquivo chamado ```main.yml```. Abaixo um exemplo de role para o mysql:
+
+
+Caminho do arquivo: ```roles/mysql/tasks/main.yml```
+```
+---
+- name: 'Instala pacotes de dependências do sistema operacional'
+  apt:
+    name:
+      - mysql-server-5.6
+      - python-mysqldb
+    state: latest
+  become: yes
+  
+- name: 'Cria o banco MySQL'
+  mysql_db:
+    name: "{{ wp_db_name }}"
+    login_user: root
+    state: present
+
+# restante do código 
+```
+
+Não precisamos dizer no código que trata-se de uma task, o Ansible já identifica isso pelo diretório em que o arquivo se encontra.
+
+Agora no nosso arquivo ```provisioning.yml``` apenas chamamos a execução dessa role:
+
+```
+---
+- hosts: database
+  roles:
+    - mysql
+```
+
+Pronto! Nosso código está modularizado.
+__________
+### Valores default para variáveis
+Caso em nosso código existam variáveis que precisem ser passadas pelo usuário, podemos declarar valores padrão para elas para que caso o usuário não as informe, nosso código ainda assim funcione corretamente.
+
+Dentro da pasta mysql, por exemplo, adicionamos uma pasta ```default``` e dentro dela o arquivo ```main.yml```. Dentro desse arquivo vamos adicionar valores padrão para os ips aceitos pelo mysql na variável ```wp_host_ip```:
+
+```
+---
+wp_host_ip:
+  - 'localhost'
+  - '127.0.0.1'
+```
+Agora no nosso arquivo ```roles/mysql/tasks/main.yml``` deixamos apenas a variável e não precisamos nos preocupar caso o usuário não passe um valor, o código ainda assim funcionará:
+```
+- name: 'Cria usuário do MySql'
+  mysql_user:
+    login_user: root
+    name: "{{ wp_username }}"
+    password: "{{ wp_user_password }}"
+    priv: "{{ wp_db_name }}.*:ALL"
+    state: present  
+    host: "{{ item }}"
+  with_items:
+    - "{{ wp_host_ip }}"
+```
+Caso o usuário deseje adicionar mais valores (os que não são default), ele pode fazer isso por meio do arquivo do grupo na pasta 'group_vars'.
+________
+### Dependências
+Quando temos roles que dependem de outras para funcionar corretamente podemos deixar isso explicito por meio de arquivos. No nosso exemplo a role do wordpress só funcionará se executada após a role do webserver, para especificar isso, adicionamos dentro da pasta do ```roles/wordpress``` a pasta ```meta``` e dentro o arquivo ```main.yml```, com o seguinte conteúdo:
+
+Caminho do arquivo: ```roles/wordpress/meta/main.yml```
+```
+---
+dependencies:
+  - webserver
+```
+Agora a role do wordpress só será executada após a role do webserver.
+_________
+### O que aprendemos?
+* Como pensar em um código que facilite o reuso;
+* Como deixar o script menos acoplado com roles;
+* Como definir os handlers dentro dos diretórios das roles;
+* Como determinar valores padrões para as roles.
+_____
